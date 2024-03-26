@@ -86,8 +86,6 @@ public class EmployeeController {
     @GetMapping("/{id}")
     public Result<Employee> editInfo(HttpServletRequest request,@PathVariable("id") Long id){
         return employeeService.editInfo(request,id);
-
-
     }
 
 }

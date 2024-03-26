@@ -16,11 +16,16 @@ import com.zjc.reggie.service.SetmealService;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.zjc.reggie.utils.RedisConstants.DISH_LIST_KEY;
+import static com.zjc.reggie.utils.RedisConstants.SETMEAL_LIST_KEY;
 
 @Service
 public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> implements SetmealService {
@@ -31,6 +36,9 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
     @Autowired
     private CategoryService categoryService;
 
+    @Autowired
+    private RedisTemplate<Object,Object> redisTemplate;
+
 
     /**
      * 新增套餐，同时保留套餐和菜品的关联关系,操作两张表
@@ -40,6 +48,9 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
     @Override
     @Transactional
     public Result<String> saveWithDish(SetmealDto setmealDto) {
+        //新增操作清理Redis缓存
+        String key = SETMEAL_LIST_KEY+setmealDto.getCategoryId();
+        redisTemplate.delete(key);
         //保存套餐基本信息，setmeal表,save执行后才会生成setmeal_id
         this.save(setmealDto);
         //保存套餐和菜品映射关系，setmeal_dish表
@@ -112,11 +123,17 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
         }
 
         //删除套餐表中的数据
+
         this.removeByIds(ids);
         //删除套餐菜品关联表中的数据
         LambdaQueryWrapper<SetmealDish> wrapper1 = new LambdaQueryWrapper<>();
         wrapper1.in(SetmealDish::getSetmealId,ids);
         setmealDishService.remove(wrapper1);
+        //更新缓存
+        Set<Object> keys = redisTemplate.keys(SETMEAL_LIST_KEY + "*");
+        if(keys!=null && keys.size()>0){
+            redisTemplate.delete(keys);
+        }
         return Result.success("套餐数据删除成功!");
     }
 
@@ -152,13 +169,20 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
      */
     @Override
     public Result<List<Setmeal>> setmealList(Setmeal setmeal) {
-        LambdaQueryWrapper<Setmeal> queryWrapper = new LambdaQueryWrapper<>();
         Long categoryId = setmeal.getCategoryId();
+        List<Setmeal> setmealList = null;
+        setmealList =(List<Setmeal>) redisTemplate.opsForValue().get(SETMEAL_LIST_KEY + categoryId);
+        if(setmealList!=null){
+            return Result.success(setmealList);
+        }
+        LambdaQueryWrapper<Setmeal> queryWrapper = new LambdaQueryWrapper<>();
+
         queryWrapper.eq(categoryId!=null,Setmeal::getCategoryId,categoryId);
         Integer status = setmeal.getStatus();
         queryWrapper.eq(status!=null,Setmeal::getStatus,1);
         queryWrapper.orderByDesc(Setmeal::getUpdateTime);
-        List<Setmeal> setmealList = this.list(queryWrapper);
+        setmealList = this.list(queryWrapper);
+        redisTemplate.opsForValue().set(SETMEAL_LIST_KEY + categoryId,setmealList);
         return Result.success(setmealList);
     }
 
@@ -187,6 +211,10 @@ public class SetmealServiceImpl extends ServiceImpl<SetmealMapper, Setmeal> impl
     @Override
     @Transactional
     public void updateWithDish(SetmealDto setmealDto) {
+
+        //更新操作清理Redis缓存
+        String key = SETMEAL_LIST_KEY+setmealDto.getCategoryId();
+        redisTemplate.delete(key);
         this.updateById(setmealDto);
         //消除原套餐关联菜品 setmeal_dish表
         Long id = setmealDto.getId();

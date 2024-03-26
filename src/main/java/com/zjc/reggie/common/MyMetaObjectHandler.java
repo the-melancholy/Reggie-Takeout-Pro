@@ -34,7 +34,8 @@ public class MyMetaObjectHandler implements MetaObjectHandler {
     }
 
     @Override
-    public MetaObjectHandler setFieldValByName(String fieldName, Object fieldVal, MetaObject metaObject) {
+    public MetaObjectHandler setFieldValByName(String fieldName, Object fieldVal,
+                                               MetaObject metaObject) {
         return MetaObjectHandler.super.setFieldValByName(fieldName, fieldVal, metaObject);
     }
 

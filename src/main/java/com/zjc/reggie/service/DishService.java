@@ -19,7 +19,7 @@ public interface DishService extends IService<Dish> {
 
      void updateWithFlavor(DishDTO dishDto);
 
-    Result<List<Dish>> dishList(Dish dish);
+
 
     Result<List<DishDTO>> dishDtoList(Dish dish);
 

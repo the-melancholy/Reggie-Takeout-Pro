@@ -12,14 +12,21 @@ import com.zjc.reggie.service.CategoryService;
 import com.zjc.reggie.service.DishFlavorService;
 import com.zjc.reggie.service.DishService;
 import com.zjc.reggie.service.SetmealDishService;
+import com.zjc.reggie.utils.RedisConstants;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.zjc.reggie.utils.RedisConstants.*;
 
 /**
  * 菜品涉及口味，需要操作两张表,开启事务
@@ -34,6 +41,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
     @Autowired
     private SetmealDishService setmealDishService;
+
+    @Autowired
+    private RedisTemplate<Object,Object> redisTemplate;
+
 
 
 
@@ -88,6 +99,9 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     @Transactional
     @Override
     public void saveWithFlavor(DishDTO dishDto) {
+        //新增操作清理Redis缓存
+        String key = DISH_LIST_KEY+dishDto.getCategoryId();
+        redisTemplate.delete(key);
         this.save(dishDto);         //保存到数据库，由雪花算法生成id
         Long id = dishDto.getId(); //菜品id
         List<DishFlavor> flavorList = dishDto.getFlavors();
@@ -126,6 +140,10 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
     @Override
     @Transactional
     public void updateWithFlavor(DishDTO dishDto) {
+        //更新操作清理Redis缓存
+        String key = DISH_LIST_KEY+dishDto.getCategoryId();
+        redisTemplate.delete(key);
+
         //更新dish表基本数据
         this.updateById(dishDto);
         //清除菜品原有口味数据
@@ -150,23 +168,13 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
      * @return
      */
     @Override
-    public Result<List<Dish>> dishList(Dish dish) {
-        Long categoryId = dish.getCategoryId();
-        //根据类别id查询
-        LambdaQueryWrapper<Dish> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(categoryId!=null,Dish::getCategoryId,categoryId);
-        //状态为1，表明在售，0表示停售
-        wrapper.eq(Dish::getStatus,1);
-        //添加排序条件
-        wrapper.orderByAsc(Dish::getSort).orderByDesc(Dish::getUpdateTime);
-        List<Dish> list = this.list(wrapper);
-
-        return Result.success(list);
-    }
-
-    @Override
     public Result<List<DishDTO>> dishDtoList(Dish dish) {
+        List<DishDTO> dishDtoList = null;
         Long categoryId = dish.getCategoryId();
+        dishDtoList = (List<DishDTO>)redisTemplate.opsForValue().get(DISH_LIST_KEY + categoryId);
+        if(dishDtoList!=null){
+            return Result.success(dishDtoList);
+        }
         //根据类别id查询
         LambdaQueryWrapper<Dish> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(categoryId!=null,Dish::getCategoryId,categoryId);
@@ -175,7 +183,7 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         //添加排序条件
         wrapper.orderByAsc(Dish::getSort).orderByDesc(Dish::getUpdateTime);
         List<Dish> list = this.list(wrapper);
-        List<DishDTO> dishDtoList = list.stream().map((item)->{
+        dishDtoList = list.stream().map( item -> {
             DishDTO dishDto = new DishDTO();
             BeanUtils.copyProperties(item,dishDto);
             Long id = item.getCategoryId(); //分类Id
@@ -192,9 +200,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
 
             return dishDto;
         }).collect(Collectors.toList());
-
+        redisTemplate.opsForValue().set(DISH_LIST_KEY + categoryId,dishDtoList,
+                DISH_LIST_TTL, TimeUnit.MINUTES);
         return Result.success(dishDtoList);
     }
+
+
 
 
     @Override
@@ -213,6 +224,12 @@ public class DishServiceImpl extends ServiceImpl<DishMapper, Dish> implements Di
         LambdaQueryWrapper<SetmealDish> wrapper1 = new LambdaQueryWrapper<>();
         wrapper1.in(SetmealDish::getDishId,ids);
         setmealDishService.remove(wrapper1);
+        //更新缓存,无法匹配类别id，只能全部删除
+        Set<Object> keys = redisTemplate.keys(DISH_LIST_KEY + "*");
+        if(keys!=null && keys.size()>0){
+            redisTemplate.delete(keys);
+        }
+
         return Result.success("套餐数据删除成功!");
 
 

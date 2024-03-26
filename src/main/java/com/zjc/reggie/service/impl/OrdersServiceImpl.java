@@ -112,7 +112,7 @@ public class OrdersServiceImpl extends ServiceImpl<OrdersMapper,Orders>
 
         //清空购物车数据  queryWrapper封装了userId我们直接使用这个条件来进行删除就行
         shoppingCartService.remove(queryWrapper);
-
+        BaseContext.remove();
         return Result.success("下单成功！");
 
     }
@@ -136,11 +136,17 @@ public class OrdersServiceImpl extends ServiceImpl<OrdersMapper,Orders>
         Page pageInfo= new Page(page, pageSize);
         //条件构造器
         LambdaQueryWrapper<Orders> wrapper= new LambdaQueryWrapper<>();
-        wrapper.like(StringUtils.isNotEmpty(number),Orders::getAddressBookId,number);
+        wrapper.like(StringUtils.isNotEmpty(number),Orders::getAddressBookId,Long.valueOf(number));
         //按更新时间排序
         wrapper.orderByAsc(Orders::getCheckoutTime);
         page(pageInfo,wrapper);
         return Result.success(pageInfo);
+    }
+
+    @Override
+    public Result<Orders> updatePatch(Orders orders) {
+        this.updateById(orders);
+        return Result.success(orders);
     }
 }
 

@@ -46,5 +46,15 @@ public class OrderController {
         return ordersService.pageShowBack(page,pageSize,number);
     }
 
+    /**
+     * 更改订单派送状态
+     * @param orders
+     * @return
+     */
+    @PutMapping
+    public Result<Orders> updatePatch(@RequestBody Orders orders){
+        return ordersService.updatePatch(orders);
+    }
+
 
 }

@@ -17,4 +17,6 @@ public interface OrdersService extends IService<Orders> {
     Result<Page> pageShow(Integer page, Integer pageSize);
 
     Result<Page> pageShowBack(Integer page, Integer pageSize,String number);
+
+    Result<Orders> updatePatch(Orders orders);
 }

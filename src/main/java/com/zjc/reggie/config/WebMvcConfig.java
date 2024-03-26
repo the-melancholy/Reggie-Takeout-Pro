@@ -25,7 +25,7 @@ public class WebMvcConfig extends WebMvcConfigurationSupport {
     }
 
     /**
-     * 扩展MVC框架的消息转换器
+     * 扩展MVC框架的消息转换器,将将java对象转换为Json,防止数据精度丢失
      * @param converters
      */
     @Override

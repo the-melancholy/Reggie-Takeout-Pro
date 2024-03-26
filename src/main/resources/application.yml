@@ -11,7 +11,7 @@ spring:
       username: root
       password: zjc201869
   redis:
-    host: 47.120.63.88
+    host: localhost
     password: zjc201869
     port: 6379
     database: 0
